@@ -1,4 +1,4 @@
-# ICT2212_MAW
+# ICT2214_MAW
 
 Project MAW (Monitored Anomalies in Web) is a self-contained security tool that monitors all web traffic from within your private network. It uses a smart two-step process for analysis: first, a fast rule-based filter catches known attack patterns; then, a second AI layer examines anything unusual, scoring its risk to create clear, prioritized alerts for your team. Unlike many security tools that rely on external cloud services, MAW is built to run entirely on your own infrastructure, keeping all sensitive traffic data private. The system's key advantage is its ability to learn and adapt. When your security analysts review and confirm a high-risk alert from the AI, that verified threat is fed back to train the AI model. This guided learning loop allows the system to make smarter, more accurate decisions when it encounters similar suspicious traffic in the future.
 

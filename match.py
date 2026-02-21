@@ -10,7 +10,6 @@ from dotenv import load_dotenv
 
 # === Config / Paths ===
 PICKLE_FILE = "rules.pkl"
-source_ip = "192.168.246.1"
 WORDLIST_PATH = "wordlist.txt"
 BOUNDARY = "----WebKitFormBoundaryYBhhLWdibeuMQdJn"
 CONTENT_TYPE = f"multipart/form-data; boundary={BOUNDARY}"
@@ -175,12 +174,12 @@ def load_wordlist(path):
         pass
     return wl
 
-def extract_creds(form_raw):
-    """WORKS 100% with your data."""
-    u_match = re.search(r'name=\\\\x22username\\\\x22\\\\x0D\\\\x0A\\\\x0D\\\\x0A([^\\\\x0D\\\\x0A]+)', form_raw)
-    p_match = re.search(r'name=\\\\x22password\\\\x22\\\\x0D\\\\x0A\\\\x0D\\\\x0A([^\\\\x0D\\\\x0A]+)', form_raw)
+# def extract_creds(form_raw):
+#     """WORKS 100% with your data."""
+#     u_match = re.search(r'name=\\\\x22username\\\\x22\\\\x0D\\\\x0A\\\\x0D\\\\x0A([^\\\\x0D\\\\x0A]+)', form_raw)
+#     p_match = re.search(r'name=\\\\x22password\\\\x22\\\\x0D\\\\x0A\\\\x0D\\\\x0A([^\\\\x0D\\\\x0A]+)', form_raw)
     
-    return u_match.group(1) if u_match else None, p_match.group(1) if p_match else None
+#     return u_match.group(1) if u_match else None, p_match.group(1) if p_match else None
 
 def check_creds(username, password, wordlist):
     username_weak = username and username.lower() in wordlist
@@ -222,7 +221,7 @@ def check_creds(username, password, wordlist):
 #             final_result = timestamp | result
 #             print(final_result)
 
-def match(packet_raw, sha256_hash):
+def match(packet, form):
     """
     Main function called from app.py
     packet_raw: raw log line (string)
@@ -234,20 +233,23 @@ def match(packet_raw, sha256_hash):
     # Load rules
     rules = load_rules(PICKLE_FILE)
 
-    # Convert raw packet string into dict (if JSON)
-    try:
-        packet = json.loads(packet_raw)
-    except:
-        packet = {}
-
     # Rule classification
     rule_matches = classify_packet(packet, rules)
     results["rule_matches"] = rule_matches
 
+    # Rainbow table check
+    username = form.get("username")
+    password = form.get("password")
+    wordlist = load_wordlist(WORDLIST_PATH)
+    cred_result = check_creds(username, password, wordlist)
+    results["credential_analysis"] = cred_result
+
     # VirusTotal check
+    sha256_hash = form.get("SHA256")
     if sha256_hash:
         vt_result = check_virustotal_sha256(sha256_hash)
         results["virustotal"] = vt_result
+    
     return results
     
 if __name__ == "__main__":

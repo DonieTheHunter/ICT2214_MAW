@@ -92,8 +92,8 @@ This is provided you are setting up the web server and reverse proxy in an inter
 
  Reverse Proxy
  ```
- sudo ufw allow from <subnet of internal network> to any port 6767
- sudo ufw allow from any to <IP address of Reverse Proxy> port 443
+ sudo ufw allow from <subnet of internal network> to any port <port no. hosting IDS web app>
+ sudo ufw allow from any to <IP address of Reverse Proxy> port <port no. hosting web server appplication from reverse proxy>
  ```
 
  Web Server

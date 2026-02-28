@@ -1,0 +1,340 @@
+#match.py
+import pickle
+import requests
+import json
+import time
+import os
+import re
+from typing import Dict, Any
+from dotenv import load_dotenv
+
+# === Config / Paths ===
+PICKLE_FILE = "rule_matching/rules.pkl"
+WORDLIST_PATH = "rule_matching/wordlist.txt"
+BOUNDARY = "----WebKitFormBoundaryYBhhLWdibeuMQdJn"
+CONTENT_TYPE = f"multipart/form-data; boundary={BOUNDARY}"
+load_dotenv()
+VT_API_KEY = os.getenv("API_KEY")
+
+# === SQL PATTERNS ===
+SQLI_PATTERNS = [
+    r"(\bor\b|\band\b)\s+\d=\d",           # OR 1=1, AND 1=1
+    r"(\bor\b|\band\b)\s+'1'='1'",        # OR '1'='1'
+    r"['\"]\s*or\s*['\"]\w+['\"]=['\"]\w+['\"]",  # ' or 'a'='a
+    r"(--|#)",                            # SQL comment
+    r"/\*.*\*/",                          # /* ... */
+    r"\bunion\b\s+\bselect\b",            # UNION SELECT
+    r"\bselect\b.+\bfrom\b",              # SELECT ... FROM
+    r"\binsert\b.+\binto\b",              # INSERT INTO
+    r"\bupdate\b.+\bset\b",               # UPDATE ... SET
+    r"\bdelete\b.+\bfrom\b",              # DELETE FROM
+    r"\bdrop\b\s+\btable\b",              # DROP TABLE
+    r"(?i)\bor\b\s+1=1",             # OR 1=1
+    r"(?i)\band\b\s+1=1",            # AND 1=1
+    r"(?i)\bor\b\s+'1'='1'",         # OR '1'='1'
+    r"(?i)\band\b\s+'1'='1'",        # AND '1'='1'
+    r"(?i)'\s*or\s*'1'='1",          # ' OR '1'='1
+    r"(?i)\"\s*or\s*\"1\"=\"1",      # " OR "1"="1
+    r"(?i)\bunion\b\s+\bselect\b",   # UNION SELECT
+    r"(?i)(--|#)",                   # SQL comments
+    r"/\*.*\*/",
+]
+SQLI_REGEXES = [re.compile(p, re.IGNORECASE | re.DOTALL) for p in SQLI_PATTERNS]
+
+SQL_STATEMENT_REGEX = re.compile(
+    r"""
+    \b
+    (select|insert|update|delete|replace|truncate|drop|alter|create)
+    \b
+    [\s\*]+
+    .{0,200}?                        # some columns / expressions
+    \b
+    (from|into|table|database)
+    \b
+    """,
+    re.IGNORECASE | re.VERBOSE | re.DOTALL,
+)
+
+# === XSS Patterns ===
+# Common XSS markers: tags, handlers, JS URLs, etc. [web:32][web:38]
+XSS_PATTERNS = [
+    r"<\s*script\b",                     # <script
+    r"<\s*img\b[^>]*\bon\w+\s*=",        # <img ... onload= / onclick= ...
+    r"<\s*iframe\b",                     # <iframe
+    r"<\s*svg\b[^>]*\bon\w+\s*=",        # <svg onload=...
+    r"javascript\s*:",                   # javascript: URI
+    r"data\s*:\s*text/html",             # data:text/html,
+    r"on\w+\s*=",                        # any inline event handler: onclick=
+    r"document\s*\.",                    # document.cookie, document.location
+    r"window\s*\.",                      # window.location
+    r"alert\s*\(",                       # alert(
+    r"prompt\s*\(",                      # prompt(
+    r"confirm\s*\(",                     # confirm(
+]
+
+XSS_REGEXES = [re.compile(p, re.IGNORECASE | re.DOTALL) for p in XSS_PATTERNS]
+
+# === Match Packet Against Rules ===
+def load_rules(filename: str):
+    with open(filename, "rb") as f:
+        rules = pickle.load(f)
+    return rules
+
+def classify_packet(pkt: dict, rules: dict):
+    """
+    Modified to accept YOUR example packet format:
+    {
+      "timestamp", "action", "protocol": "HTTP/1.1", 
+      "src_ip", "src_port", "direction", "dst_ip", "dst_port", 
+      "method", "uri", "status"
+    }
+    Returns list of (sid, type_str) or [0, ""] if no match
+    """
+
+    def match_field(rule_val, pkt_val):
+        if rule_val == "any":
+            return True
+        return str(rule_val) == str(pkt_val)
+
+    def packet_matches_rule(pkt_inner: dict, rule: dict) -> bool:
+        # Handle your protocol format (HTTP/1.1 -> treat as HTTP)
+        proto = pkt_inner.get("protocol", "").lower()
+        if "http" not in proto:
+            return False
+
+        # Match rule protocol (tcp/http/etc)
+        if rule["protocol"].lower() not in {"tcp", "http", "udp"}:
+            return False
+
+        # Use YOUR field names: src_ip, dst_ip, src_port, dst_port
+        if not match_field(rule["src_ip"], pkt_inner["src_ip"]):
+            return False
+        if not match_field(rule["dst_ip"], pkt_inner["dst_ip"]):
+            return False
+        if not match_field(rule["src_port"], pkt_inner["src_port"]):
+            return False
+        if not match_field(rule["dst_port"], pkt_inner["dst_port"]):
+            return False
+
+        if rule.get("direction") and rule["direction"] != pkt_inner.get("direction", "->"):
+            return False
+
+        opts = rule.get("options", {})
+
+        # HTTP method
+        http_method = opts.get("http_method")
+        if http_method:
+            methods = http_method if isinstance(http_method, list) else [http_method]
+            methods_clean = [m.strip('"').upper() for m in methods]
+            if pkt_inner.get("method", "").upper() not in methods_clean:
+                return False
+
+        # URI patterns (http_uri / uricontent as substring)
+        uri_opts = []
+        for key in ("http_uri", "uricontent"):
+            if key in opts:
+                val = opts[key]
+                if isinstance(val, list):
+                    uri_opts.extend(val)
+                else:
+                    uri_opts.append(val)
+
+        uri = pkt_inner.get("uri", "")
+        for pattern in uri_opts:
+            pat = pattern.strip('"')
+            if pat not in uri:
+                return False
+
+        # HTTP status code
+        stat_opt = opts.get("http_stat_code")
+        if stat_opt is not None:
+            codes = stat_opt if isinstance(stat_opt, list) else [stat_opt]
+            codes_clean = {int(str(c).strip('"')) for c in codes}
+            try:
+                pkt_status = int(str(pkt_inner.get("status", 0)).strip('"'))
+            except (TypeError, ValueError):
+                return False
+            if pkt_status not in codes_clean:
+                return False
+
+        return True
+
+    # Main matching logic
+    matches = []
+    for sid, rule in rules.items():
+        if packet_matches_rule(pkt, rule):
+            opts = rule.get("options", {})
+            msg = opts.get("msg", "Unknown web attack")
+            classtype = opts.get("classtype", "unknown")
+            if isinstance(msg, str):
+                msg = msg.strip('"')
+            type_str = f"{msg} ({classtype})"
+            matches.append((sid, type_str))
+
+    # Return [0, ""] if no matches
+    if not matches:
+        return [0, ""]
+    return matches
+
+# === Hash check using VirusTotal ===
+def check_virustotal_sha256(sha256_hash: str):
+    """
+    Simple VirusTotal checker with clear verdict.
+    Returns: {'verdict': 'MALICIOUS'|'CLEAN'|'UNKNOWN', 'detections': X}
+    """
+    url = f"https://www.virustotal.com/api/v3/files/{sha256_hash}"
+    headers = {
+        "accept": "application/json",
+        "x-apikey": VT_API_KEY,
+    }
+    
+    try:
+        r = requests.get(url, headers=headers)
+        
+        if r.status_code == 404:
+            return {'verdict': 'UNKNOWN', 'message': 'file not in database', 'detections': 0}
+        
+        if r.status_code != 200:
+            return {'verdict': 'ERROR', 'message': f'HTTP {r.status_code}', 'detections': 0}
+        
+        data = r.json()
+        stats = data["data"]["attributes"]["last_analysis_stats"]
+        malicious = stats["malicious"]
+        total = sum(stats.values())
+        
+        # Simple threshold: >5 detections = MALICIOUS (industry standard)
+        if malicious > 5:
+            verdict = 'MALICIOUS'
+        elif malicious > 0:
+            verdict = 'SUSPICIOUS' 
+        else:
+            verdict = 'CLEAN'
+            
+        return {
+            'verdict': verdict,
+            'detections': malicious,
+            'total_engines': total,
+            'ratio': f"{malicious}/{total}",
+            'harmless': stats["harmless"],
+            'undetected': stats["undetected"]
+        }
+        
+    except Exception as e:
+        return {'verdict': 'ERROR', 'message': str(e), 'detections': 0}
+
+# === Check Form Fields Against Word List ===
+def load_wordlist(path):
+    wl = set()
+    try:
+        with open(path, "r") as f:
+            wl = {line.strip().lower() for line in f if line.strip()}
+    except:
+        pass
+    return wl
+
+def check_creds(username, password, wordlist):
+    username_weak = username and username.lower() in wordlist
+    password_weak = password and password.lower() in wordlist
+    result = {
+            "username": username,
+            "password": password, 
+            "username_hit": username_weak,
+            "password_hit": password_weak,
+            "risky": username_weak or password_weak
+        }
+    
+    return result
+
+def check_sql_injection(field_value:str):
+    """"
+    Return True if the string contains obvious SQL injection patterns.
+    Very simple heuristic, not a full WAF. [web:34][web:38]
+    """
+    if not field_value:
+        return False
+    
+    # Quick reject: very short, alnum only â†’ usually safe
+    if len(field_value) < 3 and field_value.isalnum():
+        return False
+    
+    #Search for Injection
+    for rx in SQLI_REGEXES:
+        if rx.search(field_value):
+            return True
+    
+    #Search for SQL Statements
+    if bool(SQL_STATEMENT_REGEX.search(field_value)):
+        return True
+        
+    return False
+    
+def check_xss(field_value:str):
+    """
+    Heuristic XSS detector for a single field value.
+    Flags obvious payloads like:
+      <script>alert(1)</script>
+      <img src=x onerror=alert(1)>
+      javascript:alert(1)
+    """
+    if not field_value:
+        return False
+    
+    # Quick reject: short, alnum only â†’ usually safe
+    if len(field_value) < 4 and field_value.isalnum():
+        return False
+    
+    for rx in XSS_REGEXES:
+        if rx.search(field_value):
+            return True
+    return False
+
+def match(log):
+    """
+    Main detection engine.
+    Accepts a structured log dictionary.
+    Returns structured detection results.
+    """
+    log = json.loads(log)
+    result = {
+        "timestamp": log.get("timestamp"),
+        "network_matches": [],
+        "virustotal": {},
+        "credential_check": {},
+        "sql_injection": False,
+        "xss": False
+    }
+
+    # === Rule-based Network Matching ===
+    try:
+        network_matches = classify_packet(log, load_rules(PICKLE_FILE))
+        result["network_matches"] = network_matches
+    except Exception as e:
+        result["network_matches"] = {"error": str(e)}
+
+    # === VirusTotal SHA256 Check ===
+    sha256_hash = log.get("SHA256")
+    if sha256_hash:
+        vt_result = check_virustotal_sha256(sha256_hash)
+        result["virustotal"] = vt_result
+
+    # === Weak Credential Check ===
+    username = log.get("username")
+    password = log.get("password")
+
+    if username or password:
+        cred_result = check_creds(username, password, WORDLIST_PATH)
+        result["credential_check"] = cred_result
+
+    # === SQL Injection Check ===
+    if username:
+        result["sql_injection"] = check_sql_injection(username)
+
+    # === XSS Check ===
+    if username:
+        result["xss"] = check_xss(username)
+
+    if result["xss"] or result["sql_injection"] or result["credential_check"]["risky"] or \
+    (result["virustotal"]["verdict"] == "SUSPICIOUS" or result["virustotal"]["verdict"] == "MALICIOUS"):
+        return result
+    else:
+        return False

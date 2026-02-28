@@ -8,31 +8,31 @@
 
     <table>
         <tr>
+            <th>ID</th>
             <th>Time</th>
             <th>Source IP</th>
             <th>Source Port</th>
             <th>Username</th>
             <th>Filename</th>
-            <th>File Hash</th>
         </tr>
 
         {% for case in cases %}
         <tr>
+            <td>{{ case[0] }}</td>
             <td>{{ case[2] }}</td>
-            <td>{{ case[5] }}</td>
-            <td>{{ case[6] }}</td>
-            <td>{{ case[13] }}</td>
-            <td>{{ case[15] }}</td>
-            <td>{{ case[16] }}</td>
+            <td>{{ case[9] }}</td>
+            <td>{{ case[10] }}</td>
+            <td>{{ case[17] }}</td>
+            <td>{{ case[19] }}</td>
             <td>
-                {% if case[17] == 1 %}
+                {% if case[21] == 1 %}
                     Open
                 {% else %}
                     Closed
                 {% endif %}
             </td>
             <td>
-                {% if case[17] == 1 %}
+                {% if case[21] == 1 %}
                     <a href="/close/{{ case[0] }}">Close</a>
                 {% else %}
                     <a href="/open/{{ case[0] }}">Reopen</a>

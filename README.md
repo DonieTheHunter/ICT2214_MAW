@@ -9,6 +9,7 @@ System Requirements
 3. NGINX (compiled with mirror module)
 4. Root or sudo access
 5. OpenSSL (optional unless using HTTPS)
+6. Your own VirusTotal API key & OpenAI API key
 
 # Dependencies
 1. Install Python dependencies
@@ -100,3 +101,10 @@ This is provided you are setting up the web server and reverse proxy in an inter
  ```
  sudo ufw allow from <internal IP of reverse proxy> to <internal IP of web server> port <port no. of web server>
  ```
+
+# Setting up API keys
+Create a .env file inside the same folder as the main app.py and add the following
+```
+API_KEY = <key>
+OPENAI_API_KEY = <key>
+```

@@ -25,19 +25,44 @@
             <td>{{ case[17] }}</td>
             <td>{{ case[19] }}</td>
             <td>
-                {% if case[21] == 1 %}
+                {% if case[22] == 1 %}
                     Open
                 {% else %}
                     Closed
                 {% endif %}
             </td>
             <td>
-                {% if case[21] == 1 %}
+                {% if case[22] == 1 %}
                     <a href="/close/{{ case[0] }}">Close</a>
                 {% else %}
                     <a href="/open/{{ case[0] }}">Reopen</a>
                 {% endif %}
             </td>
+        </tr>
+        <tr>
+            <td colspan="8">
+                <details>
+                    <summary><strong>View Reasoning</strong></summary>
+                    {% set verdict_dict = case[21]|from_python_literal %}
+                    <table>
+                        {% for key, value in verdict_dict.items() %}
+                        <tr>
+                            <td><strong>{{ key }}:</strong></td>
+                            <td>{{ value }}</td>
+                        </tr>
+                        {% endfor %}
+                    </table>
+                </details>
+            </td>
+            {% set case_id = "{:03d}".format(case[0]) %}
+            {% if case_id in ai_results %}
+            <td colspan="8">
+                <details>
+                    <summary><strong>View AI Reasoning</strong></summary>
+                    <pre>{{ ai_results[case_id] }}</pre>
+                </details>
+            </td>
+            {% endif %}
         </tr>
         {% endfor %}
 

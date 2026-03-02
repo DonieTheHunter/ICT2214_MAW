@@ -5,6 +5,7 @@ import json
 import time
 import os
 import re
+import subprocess
 from typing import Dict, Any
 from dotenv import load_dotenv
 
@@ -298,7 +299,7 @@ def match(log):
     result = {
         "timestamp": log.get("timestamp"),
         "network_matches": [],
-        "virustotal": {},
+        "virustotal_file_check": {},
         "credential_check": {},
         "sql_injection": False,
         "xss": False
@@ -315,7 +316,7 @@ def match(log):
     sha256_hash = log.get("SHA256")
     if sha256_hash:
         vt_result = check_virustotal_sha256(sha256_hash)
-        result["virustotal"] = vt_result
+        result["virustotal_file_check"] = vt_result
 
     # === Weak Credential Check ===
     username = log.get("username")
@@ -334,7 +335,9 @@ def match(log):
         result["xss"] = check_xss(username)
 
     if result["xss"] or result["sql_injection"] or result["credential_check"]["risky"] or \
-    (result["virustotal"]["verdict"] == "SUSPICIOUS" or result["virustotal"]["verdict"] == "MALICIOUS"):
-        return result
+    (result["virustotal_file_check"]["verdict"] == "SUSPICIOUS" or result["virustotal_file_check"]["verdict"] == "MALICIOUS"):
+        return result, None
+    elif result["virustotal_file_check"]["verdict"] == "UNKNOWN" or "file not in database" in result["virustotal_file_check"]["message"]:
+        return result, "unknown"
     else:
         return False

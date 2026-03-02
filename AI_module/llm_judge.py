@@ -29,6 +29,11 @@ from typing import Any, Dict, Optional, List, Literal
 from openai import OpenAI
 from pydantic import BaseModel, Field, conlist, confloat
 
+from dotenv import load_dotenv
+
+load_dotenv()
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
 CACHE_DB = Path(__file__).resolve().parent / "llm_cache.sqlite3"
 
 DEFAULT_MODEL = os.environ.get("OPENAI_LLM_MODEL", "gpt-5-mini")
@@ -139,7 +144,7 @@ def llm_verdict(
     Returns:
       {"available": True, "cached": bool, "result": {...}} or {"available": False, "error": "..."}
     """
-    client = OpenAI()
+    client = OpenAI(api_key=OPENAI_API_KEY)
 
     safe_record = _redact(record)
 

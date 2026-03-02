@@ -3,24 +3,28 @@ from waitress import serve
 import hashlib
 import os
 import json
+import ast
+import sys
+import subprocess
 from datetime import datetime
 from werkzeug.middleware.proxy_fix import ProxyFix
 from rule_matching import match
-from cases import insert_case, get_case_by_hash, get_cases, update_case_status, is_case_open
+from cases import insert_case, get_case_by_hash, get_cases, get_open_cases, update_case_status, is_case_open
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 log_file = "log/ids-access.log"
-latest_alert = None
-alert_id = 0
+ai_path = os.path.abspath("AI_module/run_web_log_ai_2.py")
+latest_case = None
+case_id = 0
 result = {}
 last_processed_line = 0
 
 @app.route("/logs", methods=["GET"])
 def obtain_logs():
     global last_processed_line
-    global latest_alert, alert_id, result
+    global latest_case, case_id, result
 
     with open(log_file, "r") as log:
         lines = log.readlines()
@@ -40,31 +44,42 @@ def obtain_logs():
             
             #Checks if case exists
             if get_case_by_hash(log_hash):
-
-                #Checks if case is still open
-                is_open, case_id = is_case_open(log_hash)
-                if is_open:
-                    latest_alert = f"Case {case_id} is still open"
-                else:
-                    latest_alert = ""
-                    continue
+                continue
             else:
                 #Run detection
-                result = match.match(line)
+                result, unknown_or_not = match.match(line)
                 if result:
-                    latest_alert = f"{result}"
-                    alert_id += 1
-                    insert_case(line, log_hash)
+                    if unknown_or_not == "unknown":
+                        new_case_id = insert_case(line, log_hash, result)
+                        os.makedirs("log/ai_logs", exist_ok=True)
+                        ai_result = subprocess.Popen(["python3", ai_path, f'{line}', "--llm", "--pretty", "--llm-cache"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True) 
+                        with open(f"log/ai_logs/{new_case_id:03d}.log", "w") as file:
+                                for l in ai_result.stdout:
+                                    file.write(l)
+                                    file.flush()
+                        ai_result.wait()
+                    else: 
+                        insert_case(line, log_hash, result)
                 
         except json.JSONDecodeError:
             continue
 
     return jsonify(lines[-50:])
 
+@app.template_filter("from_python_literal")
+def from_python_literal_filter(value):
+    return ast.literal_eval(value)
+
 @app.route("/cases")
 def cases():
     all_cases = get_cases()
-    return render_template("cases.html", cases=all_cases)
+    case_dict = {}
+    for file in os.scandir("log/ai_logs"):
+        with open(f"log/ai_logs/{file.name}", "r") as f:
+            content = f.read()
+        case_id = os.path.splitext(file.name)[0]
+        case_dict[f"{case_id}"] = content
+    return render_template("cases.html", cases=all_cases, ai_results=case_dict)
     
 @app.route("/close/<int:case_id>")
 def close_case(case_id):
@@ -82,12 +97,20 @@ def index():
 
 @app.get("/alert")
 def get_alert():
-    return jsonify(alert=latest_alert, alert_id=alert_id)
+    cases = get_open_cases()
+    if not cases:
+        return jsonify({"case_id": None, "alert": None, })
+    alerts = []
+    for i in cases:
+        alerts.append({"case_id": i[0], "alert": f"Case {i[0]} is open"})
+    return jsonify({"alerts": alerts})
 
 
 @app.route("/uploads_test", methods=["POST"])
 def upload():
     hash_for_file = ""
+    if not os.path.exists("uploads"):
+        os.mkdir("uploads")
     for file in request.files.values():        
         path = os.path.join("uploads", file.filename)
         file.save(path)
@@ -124,6 +147,8 @@ def upload():
 def log_after_request(response):
     if hasattr(g, "log_data"):
         g.log_data["status"] = str(response.status_code)
+        if not os.path.exists(log_file):
+            os.mkdir(log_file)
         with open(log_file, "a") as file:
             file.write(json.dumps(g.log_data) + "\n")
     return response

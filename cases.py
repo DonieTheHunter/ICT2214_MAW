@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS cases (
     password_hash TEXT,
     filename TEXT,
     file_sha256 TEXT,
+    result_info TEXT,
     status INTEGER DEFAULT 1,
     datetime DATETIME DEFAULT CURRENT_TIMESTAMP
 )
@@ -37,7 +38,7 @@ CREATE TABLE IF NOT EXISTS cases (
 conn.commit()
 conn.close()
 
-def insert_case(log, log_hash):
+def insert_case(log, log_hash, result):
     conn = sqlite3.connect("cases.db")
     cursor = conn.cursor()
     log = json.loads(log)
@@ -49,9 +50,9 @@ def insert_case(log, log_hash):
             dst_ip, dst_port,
             method, uri, http_status,
             username, password_hash,
-            filename, file_sha256
+            filename, file_sha256, result_info
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         log_hash,
         log.get("timestamp"),
@@ -72,11 +73,14 @@ def insert_case(log, log_hash):
         log.get("username"),
         log.get("password"),
         log.get("filename"),
-        log.get("SHA256")
+        log.get("SHA256"),
+        f"{result}"
     ))
-
     conn.commit()
+    case_id = cursor.lastrowid
     conn.close()
+    return case_id
+     
 
 def get_cases():
     conn = sqlite3.connect("cases.db")

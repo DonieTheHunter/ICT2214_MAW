@@ -89,7 +89,7 @@ OPENAI_API_KEY = <key>
 ```
 
 9. Training/Creating the AI model
-Before starting up the server, you need to train the current AI model, so that it can have its own ruleset. Run the trained_model.py script or run the following command in the main folder (where your app.py is):
+Before starting up the server, you need to train the current AI model, so that it can have its own ruleset. Run the trained_model.py script or run the following command in the main folder (where your app.py is): (P.S. )
 ```
 python3 AI_module/trained_model.py
 ```
@@ -102,7 +102,7 @@ sudo python3 app.py
 
 
 # Additional Knowledge:
-If your AI is suddenly approving every single packet, you need to remove the following files OR run the following commands to remove the relevant files. Please start from the main directory (where your app.py is)
+If your AI is suddenly approving unknown variables, you need to remove the following files OR run the following commands to remove the relevant files. You would need to get your AI to relearn the logs you specified. Please start from the main directory (where your app.py is)
 
 Remove labels database
 ```

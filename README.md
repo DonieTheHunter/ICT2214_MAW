@@ -72,39 +72,65 @@ sudo nginx -t
  4. proxy_ssl_name [IP of web server] (line 20)
 
 
-Restart NGINX
+7. Restart NGINX
 ```
 sudo systemctl restart nginx
 ```
 
-# Running IDS
-Start Python IDS Server
-```
-sudo python3 app.py
-```
 You should see:
 ```Starting IDS on port 6767```
 The IDS UI will be available at http://[server-ip]:6767
 
-# Further Security Configurations
-1. Setting up firewall rules
-
-This is provided you are setting up the web server and reverse proxy in an internal network (The proper security configuration)
-
- Reverse Proxy
- ```
- sudo ufw allow from <subnet of internal network> to any port <port no. hosting IDS web app>
- sudo ufw allow from any to <IP address of Reverse Proxy> port <port no. hosting web server appplication from reverse proxy>
- ```
-
- Web Server
- ```
- sudo ufw allow from <internal IP of reverse proxy> to <internal IP of web server> port <port no. of web server>
- ```
-
-# Setting up API keys
+8. Setting up API keys [IMPORTANT]
 Create a .env file inside the same folder as the main app.py and add the following
 ```
 API_KEY = <key>
 OPENAI_API_KEY = <key>
+```
+
+9. Training/Creating the AI model
+Before starting up the server, you need to train the current AI model, so that it can have its own ruleset. Run the trained_model.py script or run the following command in the main folder (where your app.py is):
+```
+python3 AI_module/trained_model.py
+```
+
+10. Running IDS
+Start Python IDS Server
+```
+sudo python3 app.py
+```
+
+
+# Additional Knowledge:
+If your AI is suddenly approving every single packet, you need to remove the following files OR run the following commands to remove the relevant files. Please start from the main directory (where your app.py is)
+
+Remove labels database
+```
+cd AI_module/data
+sudo rm labels.sqlite3
+```
+Remove all model files
+```
+cd AI_module/models
+sudo rm -r *
+```
+Remove cases database (Please have it backed up should you need it again)
+```
+cd ..
+sudo rm cases.db
+```
+Remove log files
+```
+cd log
+sudo rm ai_training.log labeling_log.log
+```
+Remove AI logs
+```
+cd ~/IDS/log/ai_logs
+sudo rm *
+```
+Remove all content in main log file (Please have it backed up should you need it again)
+```
+cd ~/IDS/log
+sudo truncate -s 0 ids-access.log
 ```

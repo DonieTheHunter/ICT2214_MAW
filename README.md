@@ -134,3 +134,8 @@ Remove all content in main log file (Please have it backed up should you need it
 cd ~/IDS/log
 sudo truncate -s 0 ids-access.log
 ```
+Remove all files in history
+```
+cd models/history
+sudo rm *
+```

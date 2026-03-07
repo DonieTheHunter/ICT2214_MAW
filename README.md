@@ -88,13 +88,16 @@ API_KEY = <key>
 OPENAI_API_KEY = <key>
 ```
 
-9. Training/Creating the AI model
+9. Unzip the static folder and ensure it is in the same directory as your app.py
+
+10. Training/Creating the AI model
 Before starting up the server, you need to train the current AI model, so that it can have its own ruleset. Run the trained_model.py script or run the following command in the main folder (where your app.py is): (P.S. )
 ```
 python3 AI_module/trained_model.py
 ```
 
-10. Running IDS
+
+11. Running IDS
 Start Python IDS Server
 ```
 sudo python3 app.py

@@ -31,9 +31,9 @@ def pr_at_threshold(y_true: np.ndarray, y_prob: np.ndarray, thr: float):
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
-    p.add_argument("--csv", default="merged_web_traffic_features_rich_numeric.csv",
+    p.add_argument("--csv", default="AI_module/merged_web_traffic_features_rich_numeric.csv",
                    help="Labeled feature CSV with 'classification' column")
-    p.add_argument("--out", default="rf_web_ids_model.pkl", help="Output model bundle path")
+    p.add_argument("--out", default="AI_module/rf_web_ids_model.pkl", help="Output model bundle path")
     p.add_argument("--no-tune", action="store_true", help="Disable tuning (faster)")
     p.add_argument("--trees", type=int, default=400, help="RF trees (used when --no-tune)")
     p.add_argument("--n-iter", type=int, default=25, help="RandomizedSearch iterations (tuning)")

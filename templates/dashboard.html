@@ -1,0 +1,155 @@
+{% extends "admin_base.html" %}
+{% block content %}
+<div class="d-sm-flex align-items-center justify-content-between mb-4">
+  <h1 class="h3 mb-0 text-gray-800">Monitoring Anomalies in Web (MAW)</h1>
+  <span class="text-muted small" id="last-updated"></span>
+</div>
+
+<div class="row">
+  <!-- Alert Feed — full width -->
+  <div class="col-12 mb-4">
+    <div class="card shadow">
+      <div class="card-header py-3 d-flex justify-content-between align-items-center">
+        <h6 class="m-0 font-weight-bold text-danger">
+          <i class="fas fa-bell mr-2"></i>Active Alerts
+        </h6>
+        <button onclick="clearAll()" class="btn btn-sm btn-outline-secondary">
+          Clear All
+        </button>
+      </div>
+      <div class="card-body p-0">
+        <div id="no-alert" class="text-center text-muted py-5">
+          <i class="fas fa-shield-alt fa-2x mb-3 d-block"></i>
+          No alerts detected.
+        </div>
+        <ul id="alert-list" class="list-group list-group-flush" style="display:none;"></ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats row -->
+  <div class="col-xl-3 col-md-6 mb-4">
+    <div class="card border-left-danger shadow h-100 py-2">
+      <div class="card-body">
+        <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">Total Alerts</div>
+        <div class="h5 mb-0 font-weight-bold text-gray-800" id="total-count">0</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-3 col-md-6 mb-4">
+    <div class="card border-left-warning shadow h-100 py-2">
+      <div class="card-body">
+        <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Open Cases</div>
+        <div class="h5 mb-0 font-weight-bold text-gray-800" id="open-count">0</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-3 col-md-6 mb-4">
+    <div class="card border-left-info shadow h-100 py-2">
+      <div class="card-body">
+        <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Monitoring</div>
+        <div class="h5 mb-0 font-weight-bold text-gray-800">
+          <span class="text-success">&#9679;</span> Live
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-3 col-md-6 mb-4">
+    <div class="card border-left-success shadow h-100 py-2">
+      <div class="card-body">
+        <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Quick Links</div>
+        <a href="{{ url_for('cases') }}" class="btn btn-sm btn-success btn-block mt-1">View Cases</a>
+        <a href="{{ url_for('logs_page') }}" class="btn btn-sm btn-outline-secondary btn-block mt-1">View Logs</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let knownAlerts = new Set();
+  let totalCount = 0;
+
+  async function pollAlert() {
+    try {
+      await fetch('/logs_analysis', { cache: 'no-store' });
+      const res = await fetch('/alert', { cache: 'no-store' });
+      const data = await res.json();
+
+      if (data.alerts && data.alerts.length > 0) {
+        // update open case count
+        document.getElementById('open-count').textContent = data.alerts.length;
+
+        // add any new alerts to the list
+        data.alerts.forEach(a => {
+          if (!knownAlerts.has(a.case_id)) {
+            knownAlerts.add(a.case_id);
+            addAlert(a);
+            totalCount++;
+            document.getElementById('total-count').textContent = totalCount;
+          }
+        });
+      } else {
+        document.getElementById('open-count').textContent = 0;
+      }
+
+      // update last checked time
+      const now = new Date();
+      document.getElementById('last-updated').textContent =
+        'Last checked: ' + now.toLocaleTimeString();
+
+    } catch (e) {
+      console.error("Poll error:", e);
+    }
+  }
+
+  function addAlert(alert) {
+    const list = document.getElementById('alert-list');
+    const noAlert = document.getElementById('no-alert');
+
+    noAlert.style.display = 'none';
+    list.style.display = '';
+
+    const item = document.createElement('li');
+    item.className = 'list-group-item d-flex justify-content-between align-items-center';
+    item.id = 'alert-' + alert.case_id;
+    item.innerHTML = `
+      <div>
+        <span class="badge badge-danger mr-2">Case ${alert.case_id}</span>
+        <span class="text-gray-800">${alert.alert}</span>
+      </div>
+      <div class="d-flex align-items-center" style="gap:8px;">
+        <span class="text-muted small">${new Date().toLocaleTimeString()}</span>
+        <a href="/cases" class="btn btn-sm btn-outline-primary py-0">View</a>
+        <button onclick="dismissOne(${alert.case_id})"
+                class="btn btn-sm btn-outline-secondary py-0">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+    `;
+    list.prepend(item);  // newest at top
+  }
+
+  function dismissOne(caseId) {
+    const item = document.getElementById('alert-' + caseId);
+    if (item) item.remove();
+    const list = document.getElementById('alert-list');
+    if (list.children.length === 0) {
+      list.style.display = 'none';
+      document.getElementById('no-alert').style.display = '';
+    }
+  }
+
+  function clearAll() {
+    document.getElementById('alert-list').innerHTML = '';
+    document.getElementById('alert-list').style.display = 'none';
+    document.getElementById('no-alert').style.display = '';
+    knownAlerts.clear();
+  }
+
+  setInterval(pollAlert, 3000);
+  pollAlert();
+</script>
+{% endblock %}

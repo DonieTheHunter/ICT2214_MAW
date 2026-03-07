@@ -1,0 +1,86 @@
+{% extends "admin_base.html" %}
+{% block title %}MAW - Ingest Rules{% endblock %}
+{% block content %}
+<div class="container-fluid px-4">
+  <h1 class="mt-4">Ingest Rules</h1>
+  <ol class="breadcrumb mb-4">
+    <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+    <li class="breadcrumb-item active">Ingest Rules</li>
+  </ol>
+
+  <!-- Flash messages -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+          {{ message }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <div class="row">
+    <div class="col-xl-6">
+      <div class="card mb-4">
+        <div class="card-header">
+          <i class="fas fa-file-upload me-1"></i>
+          Upload Rules File (.txt)
+        </div>
+        <div class="card-body">
+          <p class="text-muted small">
+            Upload a Snort-compatible <code>.txt</code> rules file.
+          </p>
+
+          <form method="POST" enctype="multipart/form-data">
+            <div class="mb-3">
+              <label for="rules_file" class="form-label fw-semibold">Select Rules File</label>
+              <input class="form-control" type="file" id="rules_file" name="rules_file"
+                     accept=".txt" required>
+              <div class="form-text">Only <code>.txt</code> files are accepted.</div>
+            </div>
+            <button type="submit" class="btn btn-primary">
+              <i class="fas fa-upload me-1"></i> Ingest Rules
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xl-3">
+      <div class="card mb-4 border-left-info">
+        <div class="card-body">
+          <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Rules Loaded</div>
+          <div class="h5 mb-0 font-weight-bold text-gray-800">{{ rule_count }}</div>
+          <div class="text-muted small mt-1">Total rules currently in <code>rules.pkl</code></div>
+          <a href="{{ url_for('view_rules') }}" class="btn btn-sm btn-outline-secondary mt-2">
+            <i class="fas fa-eye me-1"></i> View Rules
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="col-xl-3">
+  <div class="card mb-4 border-left-success">
+    <div class="card-body">
+      <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+        AI Model Training
+      </div>
+
+      <div class="text-muted small mb-3">
+        Retrain the detection model using analyst labeled cases.
+      </div>
+
+      <a href="{{ url_for('train_ai_now') }}" class="btn btn-success btn-sm">
+        <i class="fas fa-brain me-1"></i> Train AI Now
+      </a>
+
+      <div class="text-muted small mt-2">
+        Automatic training runs daily at <strong>08:00</strong>.
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

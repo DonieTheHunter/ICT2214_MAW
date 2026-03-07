@@ -1,0 +1,51 @@
+{% for entry in logs %}
+  {% set d = entry.parsed %}
+  <tr>
+    {% if d %}
+      <td class="small text-muted">{{ d.get('timestamp', '—') }}</td>
+      <td class="small text-muted">{{ d.get('protocol', '—') }}</td>
+      <td><code>{{ d.get('src_ip', '—') }}</code></td>
+      <td><code>{{ d.get('dst_ip', '—') }}</code></td>
+      <td>
+        {% if d.get('method') %}
+          <span class="badge badge-secondary">{{ d.get('method') }}</span>
+        {% else %}—{% endif %}
+      </td>
+      <td>
+        {% set status = d.get('status', '') %}
+        {% if status.startswith('2') %}
+          <span class="badge badge-success">{{ status }}</span>
+        {% elif status.startswith('4') %}
+          <span class="badge badge-warning">{{ status }}</span>
+        {% elif status.startswith('5') %}
+          <span class="badge badge-danger">{{ status }}</span>
+        {% else %}
+          <span class="badge badge-secondary">{{ status or '—' }}</span>
+        {% endif %}
+      </td>
+    {% else %}
+      <td colspan="6" class="small text-muted">
+        <code style="white-space:pre-wrap; word-break:break-all;">{{ entry.raw }}</code>
+      </td>
+    {% endif %}
+
+    <td class="text-center">
+      {% if d %}
+      <button class="btn btn-sm btn-link p-0 text-muted"
+              onclick="toggleRaw(this)"
+              data-raw="{{ entry.raw | e }}"
+              title="View raw">
+        <i class="fas fa-chevron-down"></i>
+      </button>
+      {% endif %}
+    </td>
+  </tr>
+
+  {% if d %}
+  <tr class="raw-row" style="display:none;">
+    <td colspan="7" class="bg-light">
+      <pre class="mb-0 small" style="white-space:pre-wrap; word-break:break-all;"></pre>
+    </td>
+  </tr>
+  {% endif %}
+{% endfor %}

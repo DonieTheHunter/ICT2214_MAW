@@ -1,0 +1,128 @@
+{% extends "admin_base.html" %}
+{% block title %}MAW - View Rules{% endblock %}
+{% block content %}
+<div class="d-sm-flex align-items-center justify-content-between mb-4">
+  <h1 class="h3 mb-0 text-gray-800">View Rules</h1>
+  <div class="text-muted small">
+    {% if search %}
+      {{ total }} result{{ 's' if total != 1 else '' }} for "<strong>{{ search }}</strong>"
+    {% else %}
+      Showing {{ start_index }}-{{ end_index }} of {{ total }}
+    {% endif %}
+  </div>
+</div>
+
+<div class="card shadow mb-4">
+  <div class="card-header py-3">
+    <div class="d-flex justify-content-between align-items-center flex-wrap" style="gap: 10px;">
+      <h6 class="m-0 font-weight-bold text-primary">rules.pkl</h6>
+
+      <div class="d-flex align-items-center flex-wrap" style="gap: 10px;">
+
+        <!-- Search form -->
+        <form method="GET" action="{{ url_for('view_rules') }}" class="d-flex" style="gap: 4px;">
+          <div class="input-group input-group-sm" style="width: 260px;">
+            <div class="input-group-prepend">
+              <span class="input-group-text"><i class="fas fa-search"></i></span>
+            </div>
+            <input type="text" name="q" class="form-control" placeholder="Search SID or rule…"
+                   value="{{ search }}">
+            {% if search %}
+            <div class="input-group-append">
+              <a href="{{ url_for('view_rules') }}" class="btn btn-outline-secondary" title="Clear search">
+                <i class="fas fa-times"></i>
+              </a>
+            </div>
+            {% endif %}
+          </div>
+          <button type="submit" class="btn btn-sm btn-primary">Search</button>
+        </form>
+
+        <!-- Pagination controls (hidden when no results) -->
+        {% if total > 0 %}
+        <div class="d-flex align-items-center" style="gap: 8px;">
+          <span class="small text-muted">Page {{ page }} / {{ total_pages }}</span>
+
+          <nav aria-label="Rule pagination">
+            <ul class="pagination pagination-sm mb-0">
+
+              <!-- First -->
+              <li class="page-item {% if page <= 1 %}disabled{% endif %}" title="First page">
+                <a class="page-link" href="{{ url_for('view_rules', page=1, q=search) }}">
+                  <i class="fas fa-angle-double-left"></i>
+                </a>
+              </li>
+
+              <!-- Prev -->
+              <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+                <a class="page-link" href="{{ url_for('view_rules', page=page-1, q=search) }}">Prev</a>
+              </li>
+
+              <!-- Numbered pages -->
+              {% set left = page - 2 %}
+              {% set right = page + 2 %}
+              {% if left < 1 %}{% set left = 1 %}{% endif %}
+              {% if right > total_pages %}{% set right = total_pages %}{% endif %}
+              {% for p in range(left, right + 1) %}
+                <li class="page-item {% if p == page %}active{% endif %}">
+                  <a class="page-link" href="{{ url_for('view_rules', page=p, q=search) }}">{{ p }}</a>
+                </li>
+              {% endfor %}
+
+              <!-- Next -->
+              <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+                <a class="page-link" href="{{ url_for('view_rules', page=page+1, q=search) }}">Next</a>
+              </li>
+
+              <!-- Last -->
+              <li class="page-item {% if page >= total_pages %}disabled{% endif %}" title="Last page">
+                <a class="page-link" href="{{ url_for('view_rules', page=total_pages, q=search) }}">
+                  <i class="fas fa-angle-double-right"></i>
+                </a>
+              </li>
+
+            </ul>
+          </nav>
+
+          
+        </div>
+        {% endif %}
+
+      </div>
+    </div>
+  </div>
+
+  <div class="card-body">
+    {% if total == 0 %}
+      <div class="text-center text-muted py-5">
+        <i class="fas fa-search fa-2x mb-3"></i>
+        <p class="mb-1">No rules found{% if search %} for "<strong>{{ search }}</strong>"{% endif %}.</p>
+        {% if search %}
+          <a href="{{ url_for('view_rules') }}" class="btn btn-sm btn-outline-secondary mt-2">Clear search</a>
+        {% endif %}
+      </div>
+    {% else %}
+      <div class="table-responsive">
+        <table class="table table-sm table-hover">
+          <thead>
+            <tr>
+              <th style="width: 90px;">SID</th>
+              <th>Rule</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in rows %}
+            <tr>
+              <td class="text-muted"><code>{{ r.sid }}</code></td>
+              <td style="max-width: 600px;">
+                <code style="white-space: pre-wrap; word-break: break-word;">{{ r.raw }}</code>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

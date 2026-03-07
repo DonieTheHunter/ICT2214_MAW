@@ -8,24 +8,43 @@ from pathlib import Path
 from functools import lru_cache
 import joblib
 
-from features import parse_http_request, extract_features_from_http, align_features_to_training_columns
+try:
+    from .features import parse_http_request, extract_features_from_http, align_features_to_columns
+except ImportError:
+    from features import parse_http_request, extract_features_from_http, align_features_to_columns
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+CURRENT_MODEL_FILE = SCRIPT_DIR / "models" / "current_model.pkl"
+LEGACY_MODEL_FILE = SCRIPT_DIR / "rf_web_ids_model.pkl"
 
 
-MODEL_FILE = Path(__file__).resolve().parent / "rf_web_ids_model.pkl"
+def _resolve_model_file() -> Path:
+    if CURRENT_MODEL_FILE.exists():
+        return CURRENT_MODEL_FILE
+    if LEGACY_MODEL_FILE.exists():
+        return LEGACY_MODEL_FILE
+    raise FileNotFoundError(
+        "Model bundle not found. Looked for:\n"
+        f"- {CURRENT_MODEL_FILE}\n"
+        f"- {LEGACY_MODEL_FILE}"
+    )
 
 
-@lru_cache(maxsize=1)
-def load_bundle() -> dict:
-    if not MODEL_FILE.exists():
-        raise FileNotFoundError(
-            f"Model bundle not found: {MODEL_FILE}\n"
-            "Place rf_web_ids_model.pkl in the same folder as inference.py."
-        )
-    bundle = joblib.load(MODEL_FILE)
+@lru_cache(maxsize=4)
+def _load_bundle_cached(model_path: str, mtime_ns: int) -> dict:
+    bundle = joblib.load(model_path)
     for k in ("model", "feature_names", "thr_high", "thr_med"):
         if k not in bundle:
             raise ValueError(f"Invalid model bundle: missing key '{k}'")
+    bundle["__model_path__"] = model_path
+    bundle["__model_mtime_ns__"] = mtime_ns
     return bundle
+
+
+def load_bundle() -> dict:
+    model_file = _resolve_model_file()
+    stat = model_file.stat()
+    return _load_bundle_cached(str(model_file), int(stat.st_mtime_ns))
 
 
 def score_request(raw_http: str) -> dict:
@@ -37,7 +56,7 @@ def score_request(raw_http: str) -> dict:
 
     parsed = parse_http_request(raw_http)
     feats = extract_features_from_http(parsed)
-    X = align_features_to_training_columns(feats, cols)
+    X = align_features_to_columns(feats, cols)
 
     prob_attack = float(model.predict_proba(X)[:, 1][0])
     risk_score = prob_attack * 100.0
@@ -69,6 +88,7 @@ def score_request(raw_http: str) -> dict:
         "risk_score": risk_score,
         "tier": tier,
         "action": action,
+        "model_path": b.get("__model_path__", ""),
         "parsed": {
             "method": parsed.get("method", ""),
             "url": parsed.get("url", ""),

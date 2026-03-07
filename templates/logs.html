@@ -1,0 +1,195 @@
+{% extends "admin_base.html" %}
+{% block title %}MAW - Logs{% endblock %}
+{% block content %}
+
+<div class="d-sm-flex align-items-center justify-content-between mb-4">
+  <h1 class="h3 mb-0 text-gray-800">Logs</h1>
+  <div class="text-muted small">
+    {% if search %}
+      {{ total }} result{{ 's' if total != 1 else '' }} for "<strong>{{ search }}</strong>"
+    {% else %}
+      Showing {{ start_index }}-{{ end_index }} of {{ total }}
+    {% endif %}
+  </div>
+</div>
+
+<div class="card shadow mb-4">
+  <div class="card-header py-3">
+    <div class="d-flex justify-content-between align-items-center flex-wrap" style="gap: 10px;">
+      <h6 class="m-0 font-weight-bold text-primary">Access Log</h6>
+
+      <div class="d-flex align-items-center flex-wrap" style="gap: 10px;">
+
+        <!-- Search -->
+        <form method="GET" action="{{ url_for('logs_page') }}" class="d-flex" style="gap: 4px;">
+          <div class="input-group input-group-sm" style="width: 260px;">
+            <div class="input-group-prepend">
+              <span class="input-group-text"><i class="fas fa-search"></i></span>
+            </div>
+            <input type="text" name="q" class="form-control" placeholder="Search logs…"
+                   value="{{ search }}">
+            {% if search %}
+            <div class="input-group-append">
+              <a href="{{ url_for('logs_page') }}" class="btn btn-outline-secondary" title="Clear">
+                <i class="fas fa-times"></i>
+              </a>
+            </div>
+            {% endif %}
+          </div>
+          <button type="submit" class="btn btn-sm btn-primary">Search</button>
+        </form>
+
+        <!-- Pagination -->
+        {% if total > 0 %}
+        <div class="d-flex align-items-center" style="gap: 8px;">
+          <span class="small text-muted">Page {{ page }} / {{ total_pages }}</span>
+
+          <nav aria-label="Log pagination">
+            <ul class="pagination pagination-sm mb-0">
+
+              <li class="page-item {% if page <= 1 %}disabled{% endif %}" title="First">
+                <a class="page-link" href="{{ url_for('logs_page', page=1, q=search) }}">
+                  <i class="fas fa-angle-double-left"></i>
+                </a>
+              </li>
+
+              <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+                <a class="page-link" href="{{ url_for('logs_page', page=page-1, q=search) }}">Prev</a>
+              </li>
+
+              {% set left = page - 2 %}
+              {% set right = page + 2 %}
+              {% if left < 1 %}{% set left = 1 %}{% endif %}
+              {% if right > total_pages %}{% set right = total_pages %}{% endif %}
+              {% for p in range(left, right + 1) %}
+                <li class="page-item {% if p == page %}active{% endif %}">
+                  <a class="page-link" href="{{ url_for('logs_page', page=p, q=search) }}">{{ p }}</a>
+                </li>
+              {% endfor %}
+
+              <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+                <a class="page-link" href="{{ url_for('logs_page', page=page+1, q=search) }}">Next</a>
+              </li>
+
+              <li class="page-item {% if page >= total_pages %}disabled{% endif %}" title="Last">
+                <a class="page-link" href="{{ url_for('logs_page', page=total_pages, q=search) }}">
+                  <i class="fas fa-angle-double-right"></i>
+                </a>
+              </li>
+
+            </ul>
+          </nav>
+        </div>
+        {% endif %}
+
+      </div>
+    </div>
+  </div>
+
+  <div class="card-body p-0">
+    {% if total == 0 %}
+      <div class="text-center text-muted py-5">
+        <i class="fas fa-search fa-2x mb-3"></i>
+        <p class="mb-1">No logs found{% if search %} for "<strong>{{ search }}</strong>"{% endif %}.</p>
+        {% if search %}
+          <a href="{{ url_for('logs_page') }}" class="btn btn-sm btn-outline-secondary mt-2">Clear search</a>
+        {% endif %}
+      </div>
+    {% else %}
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+          <thead class="thead-light">
+            <tr>
+              <th style="width:170px;">Timestamp</th>
+              <th style="width:90px;">Protocol</th>
+              <th style="width:130px;">Source IP</th>
+              <th style="width:130px;">Dest IP</th>
+              <th style="width:70px;">Method</th>
+              <th style="width:70px;">Status</th>
+              <th style="width:40px;"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for entry in logs %}
+            {% set d = entry.parsed %}
+            <tr>
+              {% if d %}
+                <td class="small text-muted">{{ d.get('timestamp', '—') }}</td>
+                <td class="small text-muted">{{ d.get('protocol', '—') }}</td>
+                <td><code>{{ d.get('src_ip', '—') }}</code></td>
+                <td><code>{{ d.get('dst_ip', '—') }}</code></td>
+                <td>
+                  {% if d.get('method') %}
+                    <span class="badge badge-secondary">{{ d.get('method') }}</span>
+                  {% else %}—{% endif %}
+                </td>
+                <td>
+                  {% set status = d.get('status', '') %}
+                  {% if status.startswith('2') %}
+                    <span class="badge badge-success">{{ status }}</span>
+                  {% elif status.startswith('4') %}
+                    <span class="badge badge-warning">{{ status }}</span>
+                  {% elif status.startswith('5') %}
+                    <span class="badge badge-danger">{{ status }}</span>
+                  {% else %}
+                    <span class="badge badge-secondary">{{ status or '—' }}</span>
+                  {% endif %}
+                </td>
+              {% else %}
+                <td colspan="6" class="small text-muted">
+                  <code style="white-space:pre-wrap; word-break:break-all;">{{ entry.raw }}</code>
+                </td>
+              {% endif %}
+
+              <td class="text-center">
+                {% if d %}
+                <button class="btn btn-sm btn-link p-0 text-muted"
+                        onclick="toggleRaw(this)"
+                        data-raw="{{ entry.raw | e }}"
+                        title="View raw">
+                  <i class="fas fa-chevron-down"></i>
+                </button>
+                {% endif %}
+              </td>
+            </tr>
+
+            {% if d %}
+            <tr class="raw-row" style="display:none;">
+              <td colspan="7" class="bg-light">
+                <pre class="mb-0 small" style="white-space:pre-wrap; word-break:break-all;"></pre>
+              </td>
+            </tr>
+            {% endif %}
+
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  </div>
+</div>
+<script src="{{ url_for('static', filename='js/script.js') }}"></script>
+<script>
+  function toggleRaw(btn) {
+    const row = btn.closest('tr');
+    const rawRow = row.nextElementSibling;
+    const pre = rawRow.querySelector('pre');
+    const isHidden = rawRow.style.display === 'none';
+
+    if (isHidden) {
+      try {
+        const data = JSON.parse(btn.dataset.raw);
+        pre.textContent = JSON.stringify(data, null, 2);
+      } catch {
+        pre.textContent = btn.dataset.raw;
+      }
+      rawRow.style.display = '';
+      btn.querySelector('i').className = 'fas fa-chevron-up';
+    } else {
+      rawRow.style.display = 'none';
+      btn.querySelector('i').className = 'fas fa-chevron-down';
+    }
+  }
+</script>
+
+{% endblock %}

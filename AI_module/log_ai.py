@@ -7,7 +7,10 @@ from __future__ import annotations
 import json
 from typing import Any, Dict
 
-from inference import score_request
+try:
+    from .inference import score_request
+except ImportError:
+    from inference import score_request
 
 
 _META_KEYS = {

@@ -2,8 +2,8 @@
 import os
 import pickle
 
-RULES_FILE = "rule_matching/rules.txt"
-PICKLE_FILE = "rule_matching/rules.pkl"
+RULES_FILE = "rules.txt"
+PICKLE_FILE = "rules.pkl"
 
 # Ports commonly used for HTTP/HTTPS; extend if needed
 HTTP_PORTS = {80, 443, 8080, 8000, 8443}

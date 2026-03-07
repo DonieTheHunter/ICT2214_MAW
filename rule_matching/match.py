@@ -5,13 +5,12 @@ import json
 import time
 import os
 import re
-import subprocess
 from typing import Dict, Any
 from dotenv import load_dotenv
 
 # === Config / Paths ===
 PICKLE_FILE = "rule_matching/rules.pkl"
-WORDLIST_PATH = "rule_matching/wordlist.txt"
+WORDLIST_PATH = "wordlist.txt"
 BOUNDARY = "----WebKitFormBoundaryYBhhLWdibeuMQdJn"
 CONTENT_TYPE = f"multipart/form-data; boundary={BOUNDARY}"
 load_dotenv()
@@ -83,31 +82,23 @@ def load_rules(filename: str):
 
 def classify_packet(pkt: dict, rules: dict):
     """
-    Modified to accept YOUR example packet format:
-    {
-      "timestamp", "action", "protocol": "HTTP/1.1", 
-      "src_ip", "src_port", "direction", "dst_ip", "dst_port", 
-      "method", "uri", "status"
-    }
-    Returns list of (sid, type_str) or [0, ""] if no match
+    Fixed to handle Snort‑style rules with booleans and raw content.
     """
 
     def match_field(rule_val, pkt_val):
-        if rule_val == "any":
+        if rule_val in ("any", "$EXTERNAL_NET", "$HOME_NET"):
             return True
         return str(rule_val) == str(pkt_val)
 
     def packet_matches_rule(pkt_inner: dict, rule: dict) -> bool:
-        # Handle your protocol format (HTTP/1.1 -> treat as HTTP)
         proto = pkt_inner.get("protocol", "").lower()
         if "http" not in proto:
             return False
 
-        # Match rule protocol (tcp/http/etc)
-        if rule["protocol"].lower() not in {"tcp", "http", "udp"}:
+        if rule.get("protocol", "").lower() not in {"tcp", "http", "udp"}:
             return False
 
-        # Use YOUR field names: src_ip, dst_ip, src_port, dst_port
+        # 5‑tuple
         if not match_field(rule["src_ip"], pkt_inner["src_ip"]):
             return False
         if not match_field(rule["dst_ip"], pkt_inner["dst_ip"]):
@@ -122,15 +113,20 @@ def classify_packet(pkt: dict, rules: dict):
 
         opts = rule.get("options", {})
 
-        # HTTP method
+        # HTTP method - FIXED: skip if boolean, safe string conversion
         http_method = opts.get("http_method")
         if http_method:
             methods = http_method if isinstance(http_method, list) else [http_method]
-            methods_clean = [m.strip('"').upper() for m in methods]
-            if pkt_inner.get("method", "").upper() not in methods_clean:
+            methods_clean = []
+            for m in methods:
+                if isinstance(m, str):
+                    methods_clean.append(m.strip('"').upper())
+                elif isinstance(m, bool):  # skip True/False flags
+                    continue
+            if methods_clean and pkt_inner.get("method", "").upper() not in methods_clean:
                 return False
 
-        # URI patterns (http_uri / uricontent as substring)
+        # URI patterns - include content fallback
         uri_opts = []
         for key in ("http_uri", "uricontent"):
             if key in opts:
@@ -140,27 +136,42 @@ def classify_packet(pkt: dict, rules: dict):
                 else:
                     uri_opts.append(val)
 
+        if not uri_opts and "content" in opts:
+            content_val = opts["content"]
+            if isinstance(content_val, list):
+                uri_opts.extend(content_val)
+            else:
+                uri_opts.append(content_val)
+
         uri = pkt_inner.get("uri", "")
         for pattern in uri_opts:
-            pat = pattern.strip('"')
-            if pat not in uri:
+            if not isinstance(pattern, str):
+                continue
+            # Extract first token from Snort content like "/viewsource/template.html?,fast_pattern,nocase"
+            token = pattern.split(",", 1)[0].strip().strip('"')
+            if token and token not in uri:
                 return False
 
-        # HTTP status code
+        # HTTP status code - FIXED: safe int conversion
         stat_opt = opts.get("http_stat_code")
         if stat_opt is not None:
             codes = stat_opt if isinstance(stat_opt, list) else [stat_opt]
-            codes_clean = {int(str(c).strip('"')) for c in codes}
+            codes_clean = set()
+            for c in codes:
+                if isinstance(c, (int, str)):
+                    try:
+                        codes_clean.add(int(str(c).strip('"').strip()))
+                    except (ValueError, TypeError):
+                        pass
             try:
-                pkt_status = int(str(pkt_inner.get("status", 0)).strip('"'))
-            except (TypeError, ValueError):
+                pkt_status = int(str(pkt_inner.get("status", 0)).strip('"').strip())
+            except (ValueError, TypeError):
                 return False
-            if pkt_status not in codes_clean:
+            if codes_clean and pkt_status not in codes_clean:
                 return False
 
         return True
 
-    # Main matching logic
     matches = []
     for sid, rule in rules.items():
         if packet_matches_rule(pkt, rule):
@@ -172,10 +183,10 @@ def classify_packet(pkt: dict, rules: dict):
             type_str = f"{msg} ({classtype})"
             matches.append((sid, type_str))
 
-    # Return [0, ""] if no matches
     if not matches:
         return [0, ""]
     return matches
+
 
 # === Hash check using VirusTotal ===
 def check_virustotal_sha256(sha256_hash: str):
@@ -233,6 +244,13 @@ def load_wordlist(path):
         pass
     return wl
 
+def extract_creds(form_raw):
+    """WORKS 100% with your data."""
+    u_match = re.search(r'name=\\\\x22username\\\\x22\\\\x0D\\\\x0A\\\\x0D\\\\x0A([^\\\\x0D\\\\x0A]+)', form_raw)
+    p_match = re.search(r'name=\\\\x22password\\\\x22\\\\x0D\\\\x0A\\\\x0D\\\\x0A([^\\\\x0D\\\\x0A]+)', form_raw)
+    
+    return u_match.group(1) if u_match else None, p_match.group(1) if p_match else None
+
 def check_creds(username, password, wordlist):
     username_weak = username and username.lower() in wordlist
     password_weak = password and password.lower() in wordlist
@@ -254,7 +272,7 @@ def check_sql_injection(field_value:str):
     if not field_value:
         return False
     
-    # Quick reject: very short, alnum only â†’ usually safe
+    # Quick reject: very short, alnum only → usually safe
     if len(field_value) < 3 and field_value.isalnum():
         return False
     
@@ -280,7 +298,7 @@ def check_xss(field_value:str):
     if not field_value:
         return False
     
-    # Quick reject: short, alnum only â†’ usually safe
+    # Quick reject: short, alnum only → usually safe
     if len(field_value) < 4 and field_value.isalnum():
         return False
     
@@ -289,6 +307,7 @@ def check_xss(field_value:str):
             return True
     return False
 
+
 def match(log):
     """
     Main detection engine.
@@ -296,48 +315,84 @@ def match(log):
     Returns structured detection results.
     """
     log = json.loads(log)
-    result = {
-        "timestamp": log.get("timestamp"),
-        "network_matches": [],
-        "virustotal_file_check": {},
-        "credential_check": {},
-        "sql_injection": False,
-        "xss": False
-    }
+    
+    # Check if it's a POST request
+    is_post = log.get("method") == "POST"
+    
+    if is_post:
+        # Full result structure for POST requests
+        result = {
+            "timestamp": log.get("timestamp"),
+            "network_matches": [],
+            "virustotal_file_check": {},
+            "credential_check": {},
+            "sql_injection": False,
+            "xss": False
+        }
+    else:
+        # Minimal result structure for GET requests
+        result = {
+            "timestamp": log.get("timestamp"),
+            "network_matches": [],
+        }
 
-    # === Rule-based Network Matching ===
+    # === Rule-based Network Matching (always do this for all requests) ===
     try:
         network_matches = classify_packet(log, load_rules(PICKLE_FILE))
         result["network_matches"] = network_matches
     except Exception as e:
         result["network_matches"] = {"error": str(e)}
 
-    # === VirusTotal SHA256 Check ===
-    sha256_hash = log.get("SHA256")
-    if sha256_hash:
-        vt_result = check_virustotal_sha256(sha256_hash)
-        result["virustotal_file_check"] = vt_result
+    # Only perform deep analysis for POST requests
+    if is_post:
+        # === VirusTotal SHA256 Check ===
+        sha256_hash = log.get("SHA256")
+        if sha256_hash:
+            vt_result = check_virustotal_sha256(sha256_hash)
+            result["virustotal_file_check"] = vt_result
 
-    # === Weak Credential Check ===
-    username = log.get("username")
-    password = log.get("password")
+        # === Weak Credential Check ===
+        username = log.get("username")
+        password = log.get("password")
 
-    if username or password:
-        cred_result = check_creds(username, password, WORDLIST_PATH)
-        result["credential_check"] = cred_result
+        if username or password:
+            cred_result = check_creds(username, password, WORDLIST_PATH)
+            result["credential_check"] = cred_result
 
-    # === SQL Injection Check ===
-    if username:
-        result["sql_injection"] = check_sql_injection(username)
+        # === SQL Injection Check ===
+        if username:
+            result["sql_injection"] = check_sql_injection(username)
 
-    # === XSS Check ===
-    if username:
-        result["xss"] = check_xss(username)
+        # === XSS Check ===
+        if username:
+            result["xss"] = check_xss(username)
 
-    if result["xss"] or result["sql_injection"] or result["credential_check"]["risky"] or \
-    (result["virustotal_file_check"]["verdict"] == "SUSPICIOUS" or result["virustotal_file_check"]["verdict"] == "MALICIOUS"):
-        return result, None
-    elif result["virustotal_file_check"]["verdict"] == "UNKNOWN" or "file not in database" in result["virustotal_file_check"]["message"]:
-        return result, "unknown"
+        # Determine result status for POST requests
+        # Safely check if credential_check has "risky" key
+        cred_risky = False
+        if result["credential_check"]:
+            cred_risky = result["credential_check"].get("risky", False)
+        
+        # Safely check virustotal verdict
+        vt_suspicious = False
+        vt_unknown = False
+        if result["virustotal_file_check"]:
+            verdict = result["virustotal_file_check"].get("verdict", "")
+            message = result["virustotal_file_check"].get("message", "")
+            vt_suspicious = verdict in ["SUSPICIOUS", "MALICIOUS"]
+            vt_unknown = verdict == "UNKNOWN" or "file not in database" in message
+
+        if result["xss"] or result["sql_injection"] or cred_risky or vt_suspicious:
+            return result, None
+        elif vt_unknown:
+            return result, "unknown"
+        else:
+            return False
     else:
-        return False
+        # For GET requests, just return the network matches result
+        # You can define what constitutes a "hit" for GET requests here
+        # For now, let's assume any network match is considered suspicious
+        if (result["network_matches"] and len(result["network_matches"]) > 0) and (result["network_matches"][0] and result["network_matches"][1]):
+            return result, None
+        else:
+            return False

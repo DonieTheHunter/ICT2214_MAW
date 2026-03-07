@@ -1,0 +1,31 @@
+{
+  "trained_at": "2026-03-07T06:00:05Z",
+  "out": "/home/monitor/IDS/AI_module/models/current_model.pkl",
+  "rows_total": 73016,
+  "rows_base": 73014,
+  "rows_labels": 2,
+  "val_average_precision": 0.8002816915331158,
+  "test_average_precision": 0.7940625776745505,
+  "thr_high_target_precision": 0.95,
+  "thr_med_target_recall": 0.95,
+  "thr_high_val_precision": 0.9503257328990228,
+  "thr_high_val_recall": 0.2572184262728675,
+  "thr_med_val_precision": 0.4398082024076719,
+  "thr_med_val_recall": 0.9501873484681508,
+  "test_at_thr_high": {
+    "precision": 0.9472312703583062,
+    "recall": 0.2563469675599436,
+    "tp": 1454,
+    "fp": 81,
+    "fn": 4218
+  },
+  "test_at_thr_med": {
+    "precision": 0.43936170212765957,
+    "recall": 0.9465796897038082,
+    "tp": 5369,
+    "fp": 6851,
+    "fn": 303
+  },
+  "thr_high": 0.8936304381008838,
+  "thr_med": 0.19378666986183005
+}

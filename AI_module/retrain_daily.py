@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Tuple, Optional
 
@@ -199,7 +199,7 @@ def main() -> None:
     pH, rH, tpH, fpH, fnH = pr_at_threshold(y_test.to_numpy(), test_prob, float(thr_high))
     pM, rM, tpM, fpM, fnM = pr_at_threshold(y_test.to_numpy(), test_prob, float(thr_med))
 
-    trained_at = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    trained_at = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
     bundle = {
         "model": model,
@@ -236,7 +236,7 @@ def main() -> None:
     # History copy (timestamped)
     history_dir = Path(args.history_dir).expanduser().resolve()
     history_dir.mkdir(parents=True, exist_ok=True)
-    ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     hist_model = history_dir / f"model_{ts}.pkl"
     hist_report = history_dir / f"report_{ts}.json"
     try:

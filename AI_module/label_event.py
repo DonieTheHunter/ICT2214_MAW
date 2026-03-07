@@ -168,7 +168,7 @@ def main() -> None:
         source=source,
     )
 
-    with open("labeling_log.log", "a") as label_file:
+    with open("log/labeling_log.log", "a") as label_file:
         label_file.write(f"[+] Stored label id={row_id} label={label} db={labels_db}")
         if args.update_cases_db and args.case_id:
             label_file.write(f"[+] Updated cases.db label for case_id={args.case_id}\n")

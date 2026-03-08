@@ -1,4 +1,4 @@
-# run_web_log_ai.py (auto-detect uploads dir)
+# AI python file for analyzing packets
 from __future__ import annotations
 
 import argparse

@@ -14,8 +14,12 @@ System Requirements
 # Dependencies
 1. Install Python dependencies
 ```
-pip install flask waitress
+pip install Flask waitress APScheduler pandas numpy scikit-learn joblib openai python-dotenv pydantic requests Werkzeug
 ```
+
+# Template/Example Web Server Application Set up
+1. Download the template_web_server.zip and extract out its contents
+2. If you are usiing HTTPS, ensure you have your own .crt and .key HTTPS files. If not, you may remove the ssl_context in the last line of the code in app.py
 
 # Installation Guide
 1. Clone the Repository
@@ -98,8 +102,7 @@ Before starting up the server, you need to train the current AI model, so that i
 python3 AI_module/trained_model.py
 ```
 
-
-11. Running IDS
+12. Running IDS
 Start Python IDS Server
 ```
 sudo python3 app.py
